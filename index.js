@@ -2,7 +2,9 @@ const express = require("express");
 const app = express();
 const cors= require('cors');
 require('dotenv').config();
+const nodemailer = require('nodemailer');
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const stripe = require('stripe')(`${process.env.STRIPE_KEY}`)
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.sqywi72.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 const port = process.env.PORT || 3000; 
 
@@ -47,6 +49,52 @@ async function run() {
       const container = req.body;
       const collection= database.collection(serviceTitle);
       const result = await collection.insertOne(container);
+    })
+    // retrieve event
+    app.get('/retrieveEvent',async (req,res)=>{
+      const {serviceTitle} = req.query;
+      const collection= database.collection(serviceTitle);
+      const result = await collection.find().toArray();
+
+      res.send(result)
+    })
+    // client payment
+    app.post('/clientPayment',async (req,res)=>{
+      
+      const {amount} = req.body;
+      
+
+    
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount : amount * 100,  
+        currency: 'bdt',
+        automatic_payment_methods: {
+          enabled: true,
+        }
+    })
+     
+    res.send({clientSecret: paymentIntent.client_secret})
+    })
+    // send confirmation
+    app.post('/confirmation',async(req,res)=>{
+      const {amount,mail} = req.query;
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        port:587,
+        secure:false,
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS
+        },
+    });
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: mail,
+      subject: 'Payment Confirmation',
+      text: `Thank you for your payment of ${amount}`,
+  };
+    await transporter.sendMail(mailOptions);
+    res.send().status(200)
     })
   } finally {
     // // Ensures that the client will close when you finish/error
